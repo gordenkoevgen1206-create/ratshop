@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from datetime import datetime
 from aiohttp import web
 
-# --- ДАННЫЕ (ТВОИ ТОКЕНЫ) ---
+# --- КОНФИГУРАЦИЯ ---
 API_TOKEN = '8381146744:AAGifGXeiWvMFTZ3jRzWrse6hz3-uslkSkI'
 CRYPTO_TOKEN = '560696:AAGcjeTB1aNDJAajb5g3YGqzQkZ7ZjH1DJS'
 ADMIN_ID = 5035967198
@@ -36,7 +36,10 @@ def add_purchase(user_id, username, full_name, product, price_usdt, price_uah):
     db = load_db()
     uid = str(user_id)
     if uid not in db: db[uid] = {"username": username, "full_name": full_name, "purchases": [], "total_spent_uah": 0}
-    db[uid]["purchases"].append({"product": product, "price_usdt": price_usdt, "price_uah": price_uah, "date": datetime.now().strftime("%d.%m.%Y %H:%M")})
+    db[uid]["purchases"].append({
+        "product": product, "price_usdt": price_usdt, "price_uah": price_uah,
+        "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+    })
     db[uid]["total_spent_uah"] += price_uah
     save_db(db)
 
@@ -61,7 +64,7 @@ async def check_invoice(invoice_id):
                 return items[0] if items else None
         except: return None
 
-# --- КЛАВИАТУРА ---
+# --- МЕНЮ ---
 def main_kb():
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="🛒 Каталог"), KeyboardButton(text="ℹ️ Инфо")],
@@ -71,24 +74,24 @@ def main_kb():
 # --- ХЕНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message):
-    await m.answer(f"👋 Привет, *{m.from_user.first_name}*!", reply_markup=main_kb(), parse_mode="Markdown")
+    await m.answer(f"👋 Привет, *{m.from_user.first_name}*!\nВыбери раздел в меню ниже:", reply_markup=main_kb(), parse_mode="Markdown")
 
 @dp.message(F.text == "🛒 Каталог")
 async def catalog(m: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💳 КУПИТЬ SHEET RAT — 100 UAH", callback_data="buy_sheetrat")]])
-    await m.answer(f"📦 *{PRODUCT_NAME}*\n💰 Цена: *{PRODUCT_UAH} UAH*", reply_markup=kb, parse_mode="Markdown")
+    await m.answer(f"📦 *{PRODUCT_NAME}*\n💰 Цена: *{PRODUCT_UAH} UAH*\n\nНажми на кнопку для оплаты через CryptoBot 👇", reply_markup=kb, parse_mode="Markdown")
 
 @dp.callback_query(F.data == "buy_sheetrat")
 async def handle_buy(c: types.CallbackQuery):
     invoice = await create_invoice(PRODUCT_PRICE, f"Покупка: {PRODUCT_NAME}")
     if not invoice:
-        await c.answer("❌ Ошибка создания счета", show_alert=True)
+        await c.answer("❌ Ошибка платежной системы", show_alert=True)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=invoice["pay_url"])],
         [InlineKeyboardButton(text="✅ Проверить оплату", callback_data=f"check_{invoice['invoice_id']}")]
     ])
-    await c.message.edit_text(f"💳 Счёт №{invoice['invoice_id']} создан!", reply_markup=kb)
+    await c.message.edit_text(f"💳 Счёт №`{invoice['invoice_id']}` создан!\n\nПосле оплаты обязательно нажми на кнопку проверки.", reply_markup=kb, parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("check_"))
 async def check_payment(c: types.CallbackQuery):
@@ -96,13 +99,13 @@ async def check_payment(c: types.CallbackQuery):
     invoice = await check_invoice(inv_id)
     if invoice and invoice.get("status") == "paid":
         add_purchase(c.from_user.id, c.from_user.username, c.from_user.full_name, PRODUCT_NAME, PRODUCT_PRICE, PRODUCT_UAH)
-        await c.message.edit_text(f"✅ Оплачено! Твой файл:\n{FILE_URL}")
+        await c.message.edit_text(f"✅ Оплата принята!\n\nТвоя ссылка на софт:\n{FILE_URL}", parse_mode="Markdown")
     else:
-        await c.answer("❌ Оплата еще не поступила", show_alert=True)
+        await c.answer("❌ Оплата еще не подтверждена в сети", show_alert=True)
 
-# --- СЕРВЕР ДЛЯ RENDER ---
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 async def handle(request):
-    return web.Response(text="Bot is live!")
+    return web.Response(text="Бот активен!")
 
 async def start_web_server():
     app = web.Application()
@@ -112,10 +115,19 @@ async def start_web_server():
     port = int(os.getenv('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    print(f"Server started on port {port}")
 
+# --- ЗАПУСК ---
 async def main():
     logging.basicConfig(level=logging.INFO)
-    await asyncio.gather(start_web_server(), dp.start_polling(bot))
+    print("Launching bot...")
+    await asyncio.gather(
+        start_web_server(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception:
+        pass
