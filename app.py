@@ -357,14 +357,19 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiohttp import web
 
-# 1. ТВОЙ КОД БОТА (ВСТАВЬ СЮДА ВСЁ, ЧТО БЫЛО РАНЬШЕ)
-API_TOKEN = 'ТВОЙ_ТОКЕН_ТУТ'
+import os
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiohttp import web
+
+# 1. ТВОЙ КОД БОТА
+API_TOKEN = '8381146744:AAGifGXeiWvMFTZ3jRzWrse6hz3-uslkSkI' 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# ... тут все твои @dp.message() и функции ...
+# ... ТУТ ДОЛЖНЫ БЫТЬ ВСЕ ТВОИ ФУНКЦИИ И ХЕНДЛЕРЫ БОТА ...
 
-# 2. МОЙ КОД ДЛЯ RENDER (ОЖИВЛЯТОР)
+# 2. КОД ДЛЯ RENDER (ОЖИВЛЯТОР)
 async def handle(request):
     return web.Response(text="Bot is live!")
 
@@ -373,15 +378,22 @@ async def start_web_server():
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Берем порт из настроек Render или ставим 10000 по умолчанию
     port = int(os.getenv('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    print(f"Web server started on port {port}")
 
-# 3. ГЛАВНАЯ ФУНКЦИЯ ЗАПУСКА
+# 3. ГЛАВНАЯ ФУНКЦИЯ (ЗАПУСКАЕТ ВСЁ СРАЗУ)
 async def main():
-    await start_web_server()  # Сначала запускаем веб-сервер
-    await dp.start_polling(bot) # Потом запускаем бота
+    print("Starting bot and web server...")
+    # asyncio.gather запускает и сервер, и бота ОДНОВРЕМЕННО
+    await asyncio.gather(
+        start_web_server(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot stopped")
