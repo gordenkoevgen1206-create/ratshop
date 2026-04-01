@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from datetime import datetime
 from aiohttp import web
 
-# --- ДАННЫЕ ---
+# --- ДАННЫЕ (ТВОИ ТОКЕНЫ) ---
 API_TOKEN = '8381146744:AAGifGXeiWvMFTZ3jRzWrse6hz3-uslkSkI'
 CRYPTO_TOKEN = '560696:AAGcjeTB1aNDJAajb5g3YGqzQkZ7ZjH1DJS'
 ADMIN_ID = 5035967198
@@ -26,35 +26,22 @@ dp = Dispatcher()
 
 # --- БАЗА ДАННЫХ ---
 def load_db():
-    if not os.path.exists(DB_FILE):
-        return {}
-    with open(DB_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    if not os.path.exists(DB_FILE): return {}
+    with open(DB_FILE, "r", encoding="utf-8") as f: return json.load(f)
 
 def save_db(data):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    with open(DB_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
 
 def add_purchase(user_id, username, full_name, product, price_usdt, price_uah):
     db = load_db()
     uid = str(user_id)
-    if uid not in db:
-        db[uid] = {"username": username, "full_name": full_name, "purchases": [], "total_spent_uah": 0}
-    db[uid]["purchases"].append({
-        "product": product,
-        "price_usdt": price_usdt,
-        "price_uah": price_uah,
-        "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-    })
+    if uid not in db: db[uid] = {"username": username, "full_name": full_name, "purchases": [], "total_spent_uah": 0}
+    db[uid]["purchases"].append({"product": product, "price_usdt": price_usdt, "price_uah": price_uah, "date": datetime.now().strftime("%d.%m.%Y %H:%M")})
     db[uid]["total_spent_uah"] += price_uah
     save_db(db)
 
-def get_user(user_id):
-    db = load_db()
-    return db.get(str(user_id))
-
 # --- CRYPTOBOT API ---
-async def create_invoice(amount: float, description: str):
+async def create_invoice(amount, description):
     headers = {"Crypto-Pay-API-Token": CRYPTO_TOKEN, "Content-Type": "application/json"}
     payload = {"asset": "USDT", "amount": str(amount), "description": description, "expires_in": 3600}
     async with aiohttp.ClientSession() as session:
@@ -64,7 +51,7 @@ async def create_invoice(amount: float, description: str):
                 return data["result"] if data.get("ok") else None
         except: return None
 
-async def check_invoice(invoice_id: int):
+async def check_invoice(invoice_id):
     headers = {"Crypto-Pay-API-Token": CRYPTO_TOKEN}
     async with aiohttp.ClientSession() as session:
         try:
@@ -81,25 +68,10 @@ def main_kb():
         [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🔑 Админка")]
     ], resize_keyboard=True)
 
-# --- ХЕНДЛЕРЫ БОТА ---
+# --- ХЕНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message):
-    await m.answer(f"👋 Привет, *{m.from_user.first_name}*!\n\nВыбери раздел:", reply_markup=main_kb(), parse_mode="Markdown")
-    try:
-        await bot.send_message(ADMIN_ID, f"👤 Новый юзер: {m.from_user.full_name} (@{m.from_user.username})")
-    except: pass
-
-@dp.message(F.text == "ℹ️ Инфо")
-async def info(m: types.Message):
-    await m.answer("ℹ️ *О магазине*\n\nЧистые софты. Выдача моментальная.", parse_mode="Markdown")
-
-@dp.message(F.text == "👤 Профиль")
-async def profile(m: types.Message):
-    user = get_user(m.from_user.id)
-    if not user:
-        await m.answer("👤 Профиль пуст. Покупок нет.")
-        return
-    await m.answer(f"👤 Профиль: {m.from_user.full_name}\n💰 Потрачено: {user['total_spent_uah']} UAH")
+    await m.answer(f"👋 Привет, *{m.from_user.first_name}*!", reply_markup=main_kb(), parse_mode="Markdown")
 
 @dp.message(F.text == "🛒 Каталог")
 async def catalog(m: types.Message):
@@ -110,7 +82,7 @@ async def catalog(m: types.Message):
 async def handle_buy(c: types.CallbackQuery):
     invoice = await create_invoice(PRODUCT_PRICE, f"Покупка: {PRODUCT_NAME}")
     if not invoice:
-        await c.message.answer("❌ Ошибка оплаты.")
+        await c.answer("❌ Ошибка создания счета", show_alert=True)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=invoice["pay_url"])],
@@ -126,9 +98,9 @@ async def check_payment(c: types.CallbackQuery):
         add_purchase(c.from_user.id, c.from_user.username, c.from_user.full_name, PRODUCT_NAME, PRODUCT_PRICE, PRODUCT_UAH)
         await c.message.edit_text(f"✅ Оплачено! Твой файл:\n{FILE_URL}")
     else:
-        await c.answer("❌ Оплата не найдена", show_alert=True)
+        await c.answer("❌ Оплата еще не поступила", show_alert=True)
 
-# --- КОД ДЛЯ RENDER (ОЖИВЛЯТОР) ---
+# --- СЕРВЕР ДЛЯ RENDER ---
 async def handle(request):
     return web.Response(text="Bot is live!")
 
@@ -141,17 +113,9 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
-# --- ЗАПУСК ---
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Starting bot and web server...")
-    await asyncio.gather(
-        start_web_server(),
-        dp.start_polling(bot)
-    )
+    await asyncio.gather(start_web_server(), dp.start_polling(bot))
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except:
-        print("Bot stopped")
+    asyncio.run(main())
