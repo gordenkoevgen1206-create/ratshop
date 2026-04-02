@@ -23,15 +23,16 @@ PRODUCT_UAH = 100
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# --- ФЕЙКОВЫЙ ВЕБ-СЕРВЕР ДЛЯ RENDER ---
-def run_web():
+async def run_web():
     async def health(request):
         return web.Response(text="OK")
-    app = web.Application()
-    app.router.add_get("/", health)
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), print=None)
-
-threading.Thread(target=run_web, daemon=True).start()
+    webapp = web.Application()
+    webapp.router.add_get("/", health)
+    runner = web.AppRunner(webapp)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
+    await site.start()
+    logging.info("Веб-сервер запущен")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
