@@ -2,7 +2,9 @@ import asyncio
 import logging
 import json
 import os
+import threading
 import aiohttp
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -20,6 +22,16 @@ PRODUCT_NAME = "Sheet RAT"
 PRODUCT_UAH = 100
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+# --- ФЕЙКОВЫЙ ВЕБ-СЕРВЕР ДЛЯ RENDER ---
+def run_web():
+    async def health(request):
+        return web.Response(text="OK")
+    app = web.Application()
+    app.router.add_get("/", health)
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), print=None)
+
+threading.Thread(target=run_web, daemon=True).start()
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
