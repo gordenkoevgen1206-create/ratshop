@@ -2,7 +2,6 @@ import asyncio
 import logging
 import json
 import os
-import threading
 import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
@@ -22,17 +21,6 @@ PRODUCT_NAME = "Sheet RAT"
 PRODUCT_UAH = 100
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-async def run_web():
-    async def health(request):
-        return web.Response(text="OK")
-    webapp = web.Application()
-    webapp.router.add_get("/", health)
-    runner = web.AppRunner(webapp)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
-    await site.start()
-    logging.info("Веб-сервер запущен")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
@@ -146,7 +134,7 @@ async def admin(m: types.Message):
     last_text = ""
     for p in all_purchases[:5]:
         last_text += f"\n├ 👤 {p['name']} (@{p['username'] or '—'})\n├ 📦 {p['product']}\n├ 💰 {p['price_uah']} UAH ({p['price_usdt']} USDT)\n└ 🕐 {p['date']}\n"
-    await m.answer(f"🔑 *Админ панель*\n\n📊 *Статистика:*\n├ 👥 Юзеров: *{len(db)}*\n├ 🛒 Покупок: *{total_purchases}*\n├ 💵 Выручка: *{total_revenue_usdt} USDT*\n└ 💰 Выручка: *{total_revenue_uah} UAH*\n\n🕐 *Последние покупки:*\n{last_text if last_text else '_пусто_'}", parse_mode="Markdown")
+    await m.answer(f"🔑 *Админ панель*\n\n📊 *Статистика:*\n├ 👥 Юзеров: *{len(db)}*\n├ 🛒 Покупок: *{total_purchases}*\n├ 💵 Виручка: *{total_revenue_usdt} USDT*\n└ 💰 Виручка: *{total_revenue_uah} UAH*\n\n🕐 *Останні покупки:*\n{last_text if last_text else '_пусто_'}", parse_mode="Markdown")
 
 @dp.message(F.text == "🛒 Каталог")
 async def catalog(m: types.Message):
@@ -195,9 +183,23 @@ async def check_payment(c: types.CallbackQuery):
 
 async def main():
     logging.info("Бот запускается...")
+    
+    # Запускаем веб-сервер и бота параллельно
+    async def health(request):
+        return web.Response(text="OK")
+    
+    webapp = web.Application()
+    webapp.router.add_get("/", health)
+    runner = web.AppRunner(webapp)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
+    await site.start()
+    logging.info("Веб-сервер запущен")
+
+    await bot.delete_webhook(drop_pending_updates=True)
+    
     while True:
         try:
-            await bot.delete_webhook(drop_pending_updates=True)
             await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         except TelegramRetryAfter as e:
             logging.warning(f"RetryAfter: ждём {e.retry_after} сек...")
